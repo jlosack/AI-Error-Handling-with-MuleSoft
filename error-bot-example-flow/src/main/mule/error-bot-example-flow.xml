@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:mulechain-einstein1="http://www.mulesoft.org/schema/mule/mulechain-einstein1" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:anypoint-mq="http://www.mulesoft.org/schema/mule/anypoint-mq" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/anypoint-mq http://www.mulesoft.org/schema/mule/anypoint-mq/current/mule-anypoint-mq.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/mulechain-einstein1 http://www.mulesoft.org/schema/mule/mulechain-einstein1/current/mule-mulechain-einstein1.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="375c1057-f6f9-4def-aa3a-71acdc20f27e" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<anypoint-mq:config name="Anypoint_MQ_Config" doc:name="Anypoint MQ Config" doc:id="b3434dad-3355-454c-88ac-ba83b244e4b8" >
+		<anypoint-mq:connection url="https://mq-us-east-1.anypoint.mulesoft.com/api/v1/organizations/f13f2d16-67c6-4c3c-be9e-e5272cf8af0a/environments/568dac07-cbdc-4c25-9469-ee8d8ec40ccb" clientId="138c598341014662aafadeccaf0dc0ac" clientSecret="3bd53651982C42Fda2770987EBf566B4" />
+	</anypoint-mq:config>
+	<mulechain-einstein1:config name="Einstein_AI_Config" doc:name="Einstein AI Config" doc:id="48a78de6-4ee3-4bdd-b133-2a02d6373b96" >
+		<mulechain-einstein1:connection clientId="${e1.palonia.clientId}" clientSecret="${e1.palonia.clientSecret}" salesforceOrg="${e1.palonia.org}" />
+	</mulechain-einstein1:config>
+	<file:config name="File_Config" doc:name="File Config" doc:id="efcf533a-fb29-47d8-a1f5-c1d18a334e6e" />
+	<configuration-properties doc:name="Configuration properties" doc:id="bfca69d5-1960-46eb-b760-ca0a74d247d0" file="dev-config.yaml" />
+	<flow name="error-bot-example-flowFlow1" doc:id="fe7de68e-1edf-49e4-b0d5-18a35015c2a1" >
+		<http:listener doc:name="Listener" doc:id="c275175f-e5c7-44af-8eae-d3222e7420ab" config-ref="HTTP_Listener_config" path="/test"/>
+		<logger level="INFO" doc:name="Logger" doc:id="6790d2e8-b0b4-456f-9a26-ae21a6c43d6d" message='#[output json --- payload]'/>
+		<json:validate-schema doc:name="Validate schema" doc:id="ce1a734e-5c92-41ab-b279-edead741467a" schema="schemas/example_request_schema.json"/>
+		<logger level="INFO" doc:name="Logger" doc:id="432eacfd-008e-423f-af4f-154a9c0a41a1" message='#["Continue Logic"]'/>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="ebb84202-4841-4d37-bce9-7540764a91cf" type="JSON:SCHEMA_NOT_HONOURED">
+				<ee:transform doc:name="Transform Message" doc:id="28cbc36c-632b-492e-bb0d-0474456c1983" >
+					<ee:message >
+					</ee:message>
+					<ee:variables >
+						<ee:set-variable variableName="schema_path" ><![CDATA[%dw 2.0
+output text/plain
+var xmlString = error.dslSource as String
+var schemaPath = (xmlString scan /schema="([^\"]*)"/)[0][1] // Get the first match and capture group 1
+---
+schemaPath
+]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				<anypoint-mq:publish doc:name="Publish" doc:id="b80044a2-d54a-40e1-978c-5dd32680e238" config-ref="Anypoint_MQ_Config" destination="mulesoft.error.bot.reprocess">
+					<anypoint-mq:properties ><![CDATA[#[output json ---
+{
+	error_exception: error.exception.message,
+	schema_path: vars.schema_path,
+	resubmit_url: "http://localhost:8081/test"
+}]]]></anypoint-mq:properties>
+				</anypoint-mq:publish>
+				<logger level="INFO" doc:name="Logger" doc:id="2dc80181-98f3-4b97-9532-699d291606dc" message='#[{&#10;	message: "Error sent to AI reprocessing"&#10;}]'/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="error-bot-example-flowFlow" doc:id="3a907c5d-f116-4ae6-bb36-43432dfe916c" >
+		<anypoint-mq:subscriber doc:name="Subscriber" doc:id="2374c213-9b36-4aca-8072-bdd22ad42e33" config-ref="Anypoint_MQ_Config" destination="mulesoft.error.bot.reprocess"/>
+		<logger level="INFO" doc:name="Logger" doc:id="715e3232-0856-40bf-9b46-4db680a99df6" message='#[{&#10;	message: "Message Received"&#10;}]'/>
+		<set-variable value="#[attributes.properties.resubmit_url]" doc:name="Set Variable" doc:id="0ffc4948-1759-42f0-9b2d-9f19b50d113f" variableName="resubmit_url"/>
+		<file:read doc:name="Read" doc:id="559da893-3816-4bc6-ab87-321c1c8012be" path="#[p('app.home') ++&quot;/&quot; ++(attributes.properties.schema_path default &quot;&quot;)]" config-ref="File_Config" target="schema_file"/>
+		<ee:transform doc:name="Transform Message" doc:id="f7fffe3a-859e-4555-8734-bf560bfde296">
+			<ee:message>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="prompt" ><![CDATA[%dw 2.0
+output application/java
+---
+"You are given a payload and an error_exception message that describes an issue encountered during processing. Your task is to evaluate both the payload and the error_exception, then modify the payload based on the error to ensure it conforms to the required format defined by the schema_file.
+
+The schema_file is a JSON schema that outlines the correct structure and attributes for the payload. Ensure that your modifications to the payload resolve the error described in error_exception while adhering to the format defined in vars.schema_file.
+
+Input: ```BEGIN PAYLOAD"
+++ (write(payload, "application/json") as String) ++
+"```END PAYLOAD  ```BEGIN ERROR_EXCEPTION \n" ++
+(attributes.properties.error_exception as String) ++
+"```END ERROR_EXCEPTION ```BEGIN SCHEMA_FILE\n" ++
+(write(vars.schema_file, "application/json") as String) ++ 
+"```END SCHEMA_FILE\n Output:
+A corrected payload that conforms to schema_file and resolves the error_exception. Only output JSON."]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<mulechain-einstein1:chat-answer-prompt doc:name="Chat answer prompt" doc:id="e14eeb7f-f78f-4a7c-b62b-12bb9145497f" config-ref="Einstein_AI_Config" prompt="#[vars.prompt]"/>
+		<ee:transform doc:name="RAG Create Response Instructions" doc:id="27f6344e-d41d-4971-ad42-57670d2c2c0f">
+			<ee:message >
+				<ee:set-payload ><![CDATA[output json 
+var pld = read(payload,"application/json")
+--- 
+read(pld.generation.generatedText,"application/json")]]></ee:set-payload>
+			</ee:message>
+			<ee:variables>
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="Log API Response" doc:id="fec186e4-7067-434a-84ee-305f45f7f8da" message='#[{&#10;	message: "LLM generated payload",&#10;	data: payload&#10;}]' />
+		<http:request method="POST" doc:name="Request" doc:id="f9474a9f-15c9-44e5-9a82-100b7b6a8226" url="#[vars.resubmit_url]">
+			<http:body ><![CDATA[#[payload ++ {message: "LLM created this"}]]]></http:body>
+		</http:request>
+	</flow>
+</mule>
