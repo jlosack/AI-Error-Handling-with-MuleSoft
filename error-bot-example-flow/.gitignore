@@ -44,5 +44,7 @@ local.properties
 target/
 .mule/
 .DS_Store
+.tooling-project/
 velocity.log
 src/main/resources/dev-config.yaml
+src/main/resources/dev-envVars.json
