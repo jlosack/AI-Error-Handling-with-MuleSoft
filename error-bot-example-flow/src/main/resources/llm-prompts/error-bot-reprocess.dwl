@@ -11,4 +11,4 @@ Input: ```BEGIN PAYLOAD" ++ (write(payload, "application/json") as String) ++
 "```END ERROR_EXCEPTION ```BEGIN SCHEMA_FILE\n" ++
 (write(vars.schema_file, "application/json") as String) ++ 
 "```END SCHEMA_FILE\n Output:
-A corrected payload that conforms to schema_file and resolves the error_exception. Only output JSON."
+A corrected payload that conforms to schema_file and resolves the error_exception. Only output JSON without any additional back ticks or markdown."
