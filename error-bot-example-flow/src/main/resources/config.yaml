@@ -4,6 +4,6 @@ db.user: ""
 db.password: ""
 db.database: ""
 anypoint:
-  mq.url: "https://mq-us-east-1.anypoint.mulesoft.com/api/v1/organizations/updatewithyouranypointmq"
+  mq.url: "https://mq-us-east-1.anypoint.mulesoft.com/api/v1/organizations/updatewithyouranypointmqdetails"
   mq.client_id: ""
   mq.client_secret: ""
